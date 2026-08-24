@@ -1,6 +1,6 @@
 # tomcat8 — Apache Tomcat 8.0.26 RPM Packaging
 
-将 Apache Tomcat 8.0.26 封装为面向 RHEL / CentOS / Rocky / AlmaLinux（EL8）的 RPM 包，包含纯 Java 运行时主包与架构相关的原生库子包（APR 连接器 + jsvc 降权）。
+将 Apache Tomcat 8.0.26 封装为面向 RHEL / CentOS / Rocky / AlmaLinux（EL8）的 RPM 包，采用默认 NIO + JSSE 连接器（不依赖原生 TLS 库），并附带架构相关的 `tomcat8-native` 子包提供 jsvc 用于特权端口降权。
 
 ## 目录
 
@@ -17,27 +17,27 @@
 ## 特性
 
 - **双包结构**
-  - `tomcat8`（纯 Java 运行时，标记为 `noarch`）：安装到 `/opt/tomcat8`。
-  - `tomcat8-native`（架构相关）：编译 `libtcnative-1`（基于 APR 的 TLS / 网络加速）与 `jsvc`（commons-daemon 降权启动），作为主包的弱依赖自动安装。
-- **APR 连接器**：自动在 `server.xml` 中开启 `useAprConnector="true"`，获得更好的 TLS 与网络性能。
+  - `tomcat8`（纯 Java 运行时，标记为 `noarch`）：安装到 `/opt/tomcat8`，使用默认 NIO + JSSE 连接器。
+  - `tomcat8-native`（架构相关，弱依赖自动安装）：仅编译 `jsvc`（commons-daemon），用于以特权端口（80/443）启动后降权为 `tomcat` 用户。
+- **不依赖原生 TLS 库**：本包不编译 `tomcat-native`（libtcnative-1 / APR），因此不受 CentOS 8（OpenSSL 1.1.1）下原生库与 Tomcat 8.0.26 兼容性问题的困扰。
 - **配置文件保护**：原始配置存放于 `conf.dist`，首次安装时复制到 `conf`，升级不会被覆盖。
 - **Systemd 集成**：提供 `tomcat8.service`，以 `tomcat` 系统用户运行，`Restart=on-failure`。
-- **跨架构兜底**：`setenv.sh` 自动组装 `java.library.path`，兼容 `x86_64` 与 `aarch64`。
+- **启动环境兜底**：`setenv.sh` 提供 JVM 启动环境变量钩子，兼容 `x86_64` 与 `aarch64`。
 
 ## 仓库内容
 
 | 文件 | 说明 |
 | --- | --- |
 | `tomcat8.spec` | RPM 构建规范（主包 + native 子包） |
-| `setenv.sh` | Tomcat 启动环境补充，确保 JVM 找到 `libtcnative-1.so` |
+| `setenv.sh` | Tomcat 启动环境补充（JVM 启动变量钩子） |
 | `apache-tomcat-8.0.26.tar.gz` | 上游二进制发行包（放入 `~/rpmbuild/SOURCES/`） |
+| `tomcat-native-1.3.8-src.tar.gz` | 备用：新版原生库源码；本包当前不编译（与 8.0.26 的 APR 不兼容），仅供需要时自行接入 |
 
 ## 构建环境
 
 ```bash
 # 安装必要工具与编译依赖
-sudo dnf install -y rpm-build rpmdevtools gcc make autoconf libtool \
-     openssl-devel apr-devel java-1.8.0-openjdk-devel
+sudo dnf install -y rpm-build rpmdevtools gcc make java-1.8.0-openjdk-devel
 
 # 初始化 RPM 目录结构
 rpmdev-setuptree
@@ -79,8 +79,8 @@ rpmbuild -bb tomcat8.spec
 生成的 RPM 位于：
 
 ```
-~/rpmbuild/RPMS/noarch/tomcat8-8.0.26-1.el8.noarch.rpm
-~/rpmbuild/RPMS/x86_64/tomcat8-native-8.0.26-1.el8.x86_64.rpm   # 架构相关
+~/rpmbuild/RPMS/noarch/tomcat8-8.0.26-2.el8.noarch.rpm
+~/rpmbuild/RPMS/x86_64/tomcat8-native-8.0.26-2.el8.x86_64.rpm   # 仅含 jsvc，可按需安装
 ```
 
 > 实际路径与文件名后缀（如 `.el8`）取决于构建系统。
@@ -88,7 +88,7 @@ rpmbuild -bb tomcat8.spec
 ## 安装与运行
 
 ```bash
-# 安装（主包会自动 Recommends 安装 native 子包）
+# 安装（tomcat8-native 为可选弱依赖，仅在使用 jsvc 降权时需要）
 sudo dnf install -y ~/rpmbuild/RPMS/noarch/tomcat8-*.rpm \
                     ~/rpmbuild/RPMS/x86_64/tomcat8-native-*.rpm
 
@@ -114,18 +114,18 @@ curl http://localhost:8080
 ## 关键配置
 
 1. **用户权限**：自动创建系统用户 / 组 `tomcat`，主目录 `/opt/tomcat8`，禁止登录（`/sbin/nologin`）；相关目录均为 `tomcat:tomcat` 所有。
-2. **原生库**：`libtcnative-1.so` 装入 `/usr/lib64`（位于 JRE 默认 `java.library.path`），`jsvc` 装入 `/usr/libexec/tomcat8/`。
-3. **java.library.path 兜底**：`setenv.sh` 仅在未显式指定时追加，避免覆盖既有 `JAVA_OPTS`。
+2. **jsvc（可选）**：`tomcat8-native` 子包将 `jsvc` 装入 `/usr/libexec/tomcat8/`，用于绑定特权端口后降权；默认 NIO 连接器（8080）不依赖它。
+3. **启动环境钩子**：`setenv.sh` 仅在未显式指定时追加 JVM 启动变量，避免覆盖既有 `JAVA_OPTS`。
 4. **资源限制**：服务单元设置 `LimitNOFILE=65536`、`LimitNPROC=4096`。
 
 ## 常见问题
 
 | 问题 | 解决方式 |
 | --- | --- |
-| 依赖错误 | 确保已安装 `java-1.8.0-openjdk-headless` 及编译依赖 |
+| 依赖错误 | 确保已安装 `java-1.8.0-openjdk-devel`、`gcc`、`make`（编译 jsvc 需要） |
 | 权限问题 | 检查 `/opt/tomcat8`、`/var/log/tomcat8`、`/var/cache/tomcat8` 归属是否为 `tomcat` |
 | 端口冲突 | 修改 `/opt/tomcat8/conf/server.xml` 中的连接器端口 |
-| APR 未生效 | 确认 `tomcat8-native` 已安装且 `setenv.sh` 已就位，检查 `catalina.out` 中 APR 监听日志 |
+| HTTPS / TLS 配置 | 本包使用 JSSE（Java 内置 TLS），在 `conf/server.xml` 配置 `<Connector port="8443" protocol="org.apache.coyote.http11.Http11NioProtocol" SSLEnabled="true">` 即可，无需原生库 |
 
 ## License
 

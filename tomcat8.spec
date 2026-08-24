@@ -1,6 +1,6 @@
 Name:           tomcat8
 Version:        8.0.26
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Apache Tomcat 8 Servlet/JSP Container
 
 License:        Apache-2.0
@@ -8,33 +8,27 @@ URL:            https://tomcat.apache.org/
 Source0:        apache-tomcat-%{version}.tar.gz
 Source1:        setenv.sh
 
-# Native 编译依赖（libtcnative-1 / jsvc 需要 C 工具链与 apr/openssl）
+# jsvc（commons-daemon）编译依赖：C 工具链 + JDK（提供 jni.h 与 javac）
 BuildRequires:  gcc
 BuildRequires:  make
-BuildRequires:  autoconf
-BuildRequires:  libtool
-BuildRequires:  openssl-devel
-BuildRequires:  apr-devel
-BuildRequires:  libcap-devel
 BuildRequires:  java-1.8.0-openjdk-devel
 Requires:       java-headless >= 1:1.8.0
 
 # 主包为纯 Java 运行时，标记为 noarch
 BuildArch:      noarch
-# 原生子包提供 libtcnative-1.so；启用 APR 连接器需要它，这里设为弱依赖自动安装
+# 原生子包仅提供 jsvc（特权端口降权），设为弱依赖，可按需安装
 Recommends:     tomcat8-native = %{version}-%{release}
 
 %description
 Apache Tomcat is an open source implementation of the Java Servlet and
 JavaServer Pages technologies.
 
-# 原生子包：按架构分别编译（x86_64 / aarch64）
+# 原生子包：仅包含按架构编译的 jsvc（x86_64 / aarch64）
 %package native
-Summary:        Tomcat 8 native libraries (tomcat-native / commons-daemon jsvc)
+Summary:        Tomcat 8 jsvc (commons-daemon) native binary
 %description native
-Architecture-specific native components for Tomcat 8:
-- libtcnative-1  (基于 APR 的 TLS / 网络加速库)
-- jsvc           (commons-daemon，用于以特权端口启动后降权)
+Architecture-specific native component for Tomcat 8:
+- jsvc  (commons-daemon，用于以特权端口启动后降权；APR/native TLS 未启用)
 
 %prep
 %setup -q -n apache-tomcat-%{version}
@@ -51,13 +45,6 @@ export JAVA_HOME
 tar xzf bin/commons-daemon-native.tar.gz
 pushd commons-daemon-*/unix
 ./configure --with-java="$JAVA_HOME"
-make
-popd
-
-# 编译 tomcat-native (libtcnative-1)
-tar xzf bin/tomcat-native.tar.gz
-pushd tomcat-native-*/jni/native
-./configure --with-apr=/usr/bin/apr-1-config --with-ssl=/usr --with-java-home="$JAVA_HOME" --prefix=%{_prefix}
 make
 popd
 
@@ -80,21 +67,10 @@ mkdir -p %{buildroot}/var/cache/tomcat8/{temp,work}
 mv %{buildroot}/opt/tomcat8/conf %{buildroot}/opt/tomcat8/conf.dist
 touch %{buildroot}/var/cache/tomcat8/tomcat8.pid
 
-# 启用 APR 连接器（需 tomcat8-native 提供 libtcnative-1.so）
-# 仅当已存在 AprLifecycleListener 且尚未配置 useAprConnector 时追加，幂等
-if grep -q 'AprLifecycleListener' %{buildroot}/opt/tomcat8/conf.dist/server.xml && \
-   ! grep -q 'useAprConnector' %{buildroot}/opt/tomcat8/conf.dist/server.xml; then
-    sed -i 's#<Listener className="org.apache.catalina.core.AprLifecycleListener"[^>]*>#<Listener className="org.apache.catalina.core.AprLifecycleListener" SSLEngine="on" useAprConnector="true" />#' \
-        %{buildroot}/opt/tomcat8/conf.dist/server.xml
-fi
-
-# 安装自定义 setenv.sh（APR 原生库路径兜底，两架构通用）
+# 安装自定义 setenv.sh（JVM 启动环境变量兜底）
 install -m 0644 %{SOURCE1} %{buildroot}/opt/tomcat8/bin/setenv.sh
 
-# 安装 native 库
-# libtcnative-1 直接装入 %{_libdir} (/usr/lib64)，位于 JRE 默认 java.library.path
-install -m 0755 tomcat-native-*/jni/native/.libs/libtcnative-1.so* %{buildroot}%{_libdir}/
-# jsvc 装入 libexec，避免污染 PATH
+# jsvc 装入 libexec，避免污染 PATH（native 子包）
 mkdir -p %{buildroot}%{_libexecdir}/tomcat8
 install -m 0755 commons-daemon-*/unix/jsvc %{buildroot}%{_libexecdir}/tomcat8/jsvc
 
@@ -153,12 +129,6 @@ fi
 # 重载 systemd
 systemctl daemon-reload &>/dev/null || :
 
-%post native
-ldconfig || :
-
-%postun native
-ldconfig || :
-
 %files
 %defattr(-,tomcat,tomcat,-)
 /opt/tomcat8
@@ -168,10 +138,14 @@ ldconfig || :
 /usr/lib/systemd/system/tomcat8.service
 
 %files native
-%{_libdir}/libtcnative-1.so*
 %{_libexecdir}/tomcat8/jsvc
 
 %changelog
+* Mon Aug 24 2026 Your Name <you@example.com> - 8.0.26-2
+- 改用默认 NIO + JSSE 连接器，移除 tomcat-native（libtcnative-1）编译与
+  useAprConnector 强制，避免 CentOS 8 (OpenSSL 1.1.1) 下的原生库兼容问题；
+  原生子包仅保留 commons-daemon jsvc 用于特权端口降权
+
 * Tue Jun 4 2024 Your Name <you@example.com> - 8.0.26-1
 - Initial RPM package for Tomcat 8.0.26
-- Build tomcat-native (libtcnative-1) and commons-daemon (jsvc) natively
+- Build commons-daemon (jsvc) natively
