@@ -15,7 +15,7 @@ BuildRequires:  autoconf
 BuildRequires:  libtool
 BuildRequires:  openssl-devel
 BuildRequires:  apr-devel
-BuildRequires:  java-1.8.0-openjdk-headless
+BuildRequires:  java-1.8.0-openjdk-devel
 Requires:       java-headless >= 1:1.8.0
 
 %description
@@ -43,7 +43,7 @@ Architecture-specific native components for Tomcat 8:
 %setup -q -n apache-tomcat-%{version}
 
 %build
-# 探测 JAVA_HOME（容器内为 java-1.8.0-openjdk-headless）
+# 探测 JAVA_HOME（容器内为 java-1.8.0-openjdk-devel，提供 jni.h 与 javac）
 export JAVA_HOME=$(ls -d /usr/lib/jvm/java-1.8.0-openjdk 2>/dev/null | head -1)
 if [ -z "$JAVA_HOME" ]; then
     JAVA_HOME=$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")

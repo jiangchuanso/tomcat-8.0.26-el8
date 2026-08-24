@@ -37,11 +37,26 @@
 ```bash
 # 安装必要工具与编译依赖
 sudo dnf install -y rpm-build rpmdevtools gcc make autoconf libtool \
-     openssl-devel apr-devel java-1.8.0-openjdk-headless
+     openssl-devel apr-devel java-1.8.0-openjdk-devel
 
 # 初始化 RPM 目录结构
 rpmdev-setuptree
 ```
+
+> **CentOS 8 兼容性提示**
+> - CentOS 8 已 EOL，默认仓库已下线。建议改用 Rocky Linux / AlmaLinux 8，或先将仓库指向 vault：
+>   ```bash
+>   sudo dnf config-manager --setopt='*.module_hotfixes=1' --save \
+>     && sudo sed -i 's|mirrorlist=|#mirrorlist=|; s|#baseurl=http://mirror|baseurl=http://vault|' \
+>        /etc/yum.repos.d/CentOS-*.repo
+>   sudo dnf makecache
+>   ```
+> - `rpmdevtools` 位于 PowerTools（CentOS）/ CRB（Rocky/Alma）仓库。若该仓库未启用：
+>   ```bash
+>   sudo dnf config-manager --set-enabled powertools   # CentOS 8
+>   # 或 sudo dnf config-manager --set-enabled crb     # Rocky / Alma 8
+>   ```
+> - 构建原生库需要 **JDK devel 包**（`java-1.8.0-openjdk-devel`，提供 `jni.h` 与 `javac`），仅安装 `headless` 会因缺少 JNI 头文件而编译失败。
 
 `rpmdev-setuptree` 会创建 `~/rpmbuild`，包含：`BUILD`、`BUILDROOT`、`RPMS`、`SOURCES`、`SPECS`、`SRPMS`。
 
