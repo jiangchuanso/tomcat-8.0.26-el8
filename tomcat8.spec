@@ -6,6 +6,7 @@ Summary:        Apache Tomcat 8 Servlet/JSP Container
 License:        Apache-2.0
 URL:            https://tomcat.apache.org/
 Source0:        apache-tomcat-%{version}.tar.gz
+Source1:        setenv.sh
 
 # Native 编译依赖（libtcnative-1 / jsvc 需要 C 工具链与 apr/openssl）
 BuildRequires:  gcc
@@ -79,6 +80,9 @@ mkdir -p %{buildroot}/var/log/tomcat8
 mkdir -p %{buildroot}/var/cache/tomcat8/{temp,work}
 mv %{buildroot}/opt/tomcat8/conf %{buildroot}/opt/tomcat8/conf.dist
 touch %{buildroot}/var/cache/tomcat8/tomcat8.pid
+
+# 安装自定义 setenv.sh（APR 原生库路径兜底，两架构通用）
+install -m 0644 %{SOURCE1} %{buildroot}/opt/tomcat8/bin/setenv.sh
 
 # 安装 native 库
 # libtcnative-1 直接装入 %{_libdir} (/usr/lib64)，位于 JRE 默认 java.library.path

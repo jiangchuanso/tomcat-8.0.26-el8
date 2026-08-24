@@ -61,6 +61,7 @@ jobs:
               # 准备源代码
               cp tomcat8.spec "$HOME/rpmbuild/SPECS/"
               cp "apache-tomcat-${{ env.TOMCAT_VERSION }}.tar.gz" "$HOME/rpmbuild/SOURCES/"
+              cp setenv.sh "$HOME/rpmbuild/SOURCES/"
 
               # 自动安装 spec 中声明的 BuildRequires
               dnf builddep -y "$HOME/rpmbuild/SPECS/tomcat8.spec"
