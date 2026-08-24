@@ -1,0 +1,11 @@
+# 解压后的目录：源码以 tar.gz 形式提交，作为 rpm 的 Source0
+/apache-tomcat-8.0.26/
+
+# 本地 rpmbuild 目录与产物
+rpmbuild/
+/rpms/
+*.rpm
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db
