@@ -48,14 +48,14 @@ export JAVA_HOME
 
 # 编译 commons-daemon (jsvc)
 tar xzf bin/commons-daemon-native.tar.gz
-pushd commons-daemon-*/src/native/unix
+pushd commons-daemon-*/unix
 ./configure --with-java="$JAVA_HOME"
 make
 popd
 
 # 编译 tomcat-native (libtcnative-1)
 tar xzf bin/tomcat-native.tar.gz
-pushd tomcat-native-*/native
+pushd tomcat-native-*/jni/native
 ./configure --with-apr --with-ssl --with-java-home="$JAVA_HOME" --prefix=%{_prefix}
 make
 popd
@@ -92,10 +92,10 @@ install -m 0644 %{SOURCE1} %{buildroot}/opt/tomcat8/bin/setenv.sh
 
 # 安装 native 库
 # libtcnative-1 直接装入 %{_libdir} (/usr/lib64)，位于 JRE 默认 java.library.path
-install -m 0755 tomcat-native-*/native/.libs/libtcnative-1.so* %{buildroot}%{_libdir}/
+install -m 0755 tomcat-native-*/jni/native/.libs/libtcnative-1.so* %{buildroot}%{_libdir}/
 # jsvc 装入 libexec，避免污染 PATH
 mkdir -p %{buildroot}%{_libexecdir}/tomcat8
-install -m 0755 commons-daemon-*/src/native/unix/jsvc %{buildroot}%{_libexecdir}/tomcat8/jsvc
+install -m 0755 commons-daemon-*/unix/jsvc %{buildroot}%{_libexecdir}/tomcat8/jsvc
 
 # 创建 systemd 服务文件
 mkdir -p %{buildroot}/usr/lib/systemd/system
