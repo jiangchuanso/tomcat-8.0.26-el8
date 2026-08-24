@@ -1,2 +1,5 @@
 # CodeBuddy 项目数据（不参与上传/提交）
 .codebuddy/
+
+# WorkBuddy 本地工具目录
+/.workbuddy/
