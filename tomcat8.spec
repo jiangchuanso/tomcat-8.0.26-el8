@@ -26,6 +26,8 @@ JavaServer Pages technologies.
 %package -n tomcat8
 BuildArch:      noarch
 Summary:        Apache Tomcat 8 Servlet/JSP Container (Java runtime)
+# 原生子包提供 libtcnative-1.so；启用 APR 连接器需要它，这里设为弱依赖自动安装
+Recommends:     tomcat8-native = %{version}-%{release}
 %description -n tomcat8
 Apache Tomcat 8 (pure-Java runtime) installed to /opt/tomcat8.
 
@@ -80,6 +82,14 @@ mkdir -p %{buildroot}/var/log/tomcat8
 mkdir -p %{buildroot}/var/cache/tomcat8/{temp,work}
 mv %{buildroot}/opt/tomcat8/conf %{buildroot}/opt/tomcat8/conf.dist
 touch %{buildroot}/var/cache/tomcat8/tomcat8.pid
+
+# 启用 APR 连接器（需 tomcat8-native 提供 libtcnative-1.so）
+# 仅当已存在 AprLifecycleListener 且尚未配置 useAprConnector 时追加，幂等
+if grep -q 'AprLifecycleListener' %{buildroot}/opt/tomcat8/conf.dist/server.xml && \
+   ! grep -q 'useAprConnector' %{buildroot}/opt/tomcat8/conf.dist/server.xml; then
+    sed -i 's#<Listener className="org.apache.catalina.core.AprLifecycleListener"[^>]*>#<Listener className="org.apache.catalina.core.AprLifecycleListener" SSLEngine="on" useAprConnector="true" />#' \
+        %{buildroot}/opt/tomcat8/conf.dist/server.xml
+fi
 
 # 安装自定义 setenv.sh（APR 原生库路径兜底，两架构通用）
 install -m 0644 %{SOURCE1} %{buildroot}/opt/tomcat8/bin/setenv.sh
