@@ -15,6 +15,7 @@ BuildRequires:  autoconf
 BuildRequires:  libtool
 BuildRequires:  openssl-devel
 BuildRequires:  apr-devel
+BuildRequires:  libcap-devel
 BuildRequires:  java-1.8.0-openjdk-devel
 Requires:       java-headless >= 1:1.8.0
 
@@ -56,7 +57,7 @@ popd
 # 编译 tomcat-native (libtcnative-1)
 tar xzf bin/tomcat-native.tar.gz
 pushd tomcat-native-*/jni/native
-./configure --with-apr --with-ssl --with-java-home="$JAVA_HOME" --prefix=%{_prefix}
+./configure --with-apr=/usr/bin/apr-1-config --with-ssl=/usr --with-java-home="$JAVA_HOME" --prefix=%{_prefix}
 make
 popd
 
