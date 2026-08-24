@@ -18,18 +18,14 @@ BuildRequires:  apr-devel
 BuildRequires:  java-1.8.0-openjdk-devel
 Requires:       java-headless >= 1:1.8.0
 
+# 主包为纯 Java 运行时，标记为 noarch
+BuildArch:      noarch
+# 原生子包提供 libtcnative-1.so；启用 APR 连接器需要它，这里设为弱依赖自动安装
+Recommends:     tomcat8-native = %{version}-%{release}
+
 %description
 Apache Tomcat is an open source implementation of the Java Servlet and
 JavaServer Pages technologies.
-
-# 主包：纯 Java 运行时，标记为 noarch
-%package -n tomcat8
-BuildArch:      noarch
-Summary:        Apache Tomcat 8 Servlet/JSP Container (Java runtime)
-# 原生子包提供 libtcnative-1.so；启用 APR 连接器需要它，这里设为弱依赖自动安装
-Recommends:     tomcat8-native = %{version}-%{release}
-%description -n tomcat8
-Apache Tomcat 8 (pure-Java runtime) installed to /opt/tomcat8.
 
 # 原生子包：按架构分别编译（x86_64 / aarch64）
 %package native
@@ -133,7 +129,7 @@ EOF
 %clean
 rm -rf %{buildroot}
 
-%post -n tomcat8
+%post
 # 创建系统用户和组
 if ! id tomcat &>/dev/null; then
     groupadd -r tomcat
@@ -162,7 +158,7 @@ ldconfig || :
 %postun native
 ldconfig || :
 
-%files -n tomcat8
+%files
 %defattr(-,tomcat,tomcat,-)
 /opt/tomcat8
 /var/log/tomcat8
