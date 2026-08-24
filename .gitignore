@@ -1,5 +1,3 @@
-# CodeBuddy 项目数据（不参与上传/提交）
-.codebuddy/
-
-# WorkBuddy 本地工具目录
-/.workbuddy/
+# 忽略根目录所有以 . 开头的文件/文件夹（保留 .github CI 配置）
+/.*
+!/.github/
