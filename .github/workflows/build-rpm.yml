@@ -20,39 +20,26 @@ env:
 
 jobs:
   build:
-    name: Build RPM (${{ matrix.arch }})
+    name: Build RPM (noarch)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x86_64
-            platform: linux/amd64
-          - arch: aarch64
-            platform: linux/arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 注册 QEMU，使 x86_64 的 runner 能运行/模拟 arm64 容器
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Build RPM in Rocky Linux 8 container
-        env:
-          TARGET_PLATFORM: ${{ matrix.platform }}
+      # 整包为纯 Java noarch，x86_64 / aarch64 产物一致，单次构建即可，
+      # 无需 QEMU 模拟 arm64，也无需区分处理器架构
+      - name: Build noarch RPM in Rocky Linux 8 container
         run: |
-          docker run --rm --platform "$TARGET_PLATFORM" \
+          docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             rockylinux:8 \
             /bin/bash -c '
               set -euxo pipefail
 
-              # 安装编译与 RPM 构建工具
+              # 纯 Java noarch 包：只需 RPM 构建工具，无需 gcc/make/openssl/apr 等原生编译链
               dnf install -y --setopt=install_weak_deps=False \
                 rpm-build rpmdevtools tar gzip which file \
-                gcc make autoconf libtool openssl-devel apr-devel \
                 java-1.8.0-openjdk-headless dnf-plugins-core
 
               # 初始化 rpmbuild 目录树
@@ -63,10 +50,10 @@ jobs:
               cp "apache-tomcat-${{ env.TOMCAT_VERSION }}.tar.gz" "$HOME/rpmbuild/SOURCES/"
               cp setenv.sh "$HOME/rpmbuild/SOURCES/"
 
-              # 自动安装 spec 中声明的 BuildRequires
+              # 自动安装 spec 中声明的 BuildRequires（本包为空，no-op）
               dnf builddep -y "$HOME/rpmbuild/SPECS/tomcat8.spec"
 
-              # 构建（主包 noarch + 原生子包按目标架构）
+              # 构建（整包 noarch，单次构建）
               rpmbuild -bb --clean "$HOME/rpmbuild/SPECS/tomcat8.spec"
 
               # 收集产物
@@ -78,7 +65,7 @@ jobs:
       - name: Upload RPM artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: rpms-${{ matrix.arch }}
+          name: rpms
           path: rpms/*.rpm
           if-no-files-found: error
 
@@ -88,20 +75,11 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
-      - name: Download all RPMs
+      - name: Download RPMs
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
-
-      - name: Collate (去重各架构相同的 noarch 包)
-        run: |
-          mkdir -p dist
-          # cp -n 只保留首次出现的文件；noarch 主包在不同架构下内容一致，自动去重
-          for d in artifacts/rpms-*; do
-            cp -n "$d"/*.rpm dist/ || true
-          done
-          echo "==== final RPMs ===="
-          ls -l dist
+          name: rpms
+          path: dist
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
