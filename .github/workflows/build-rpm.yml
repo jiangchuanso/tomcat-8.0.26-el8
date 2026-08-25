@@ -81,8 +81,8 @@ jobs:
               verify_ok=0
               for SUF in sha512 sha1 md5; do
                 if curl -fsSL -o "/tmp/apache-tomcat-${TOMCAT_VERSION}.tar.gz.${SUF}" "${TOMCAT_URL}.${SUF}"; then
-                  EXPECTED="$(awk '{print $1}' "/tmp/apache-tomcat-${TOMCAT_VERSION}.tar.gz.${SUF}")"
-                  ACTUAL="$(${SUF}sum "$TARBALL" | awk '{print $1}')"
+                  EXPECTED="$(cut -d" " -f1 "/tmp/apache-tomcat-${TOMCAT_VERSION}.tar.gz.${SUF}")"
+                  ACTUAL="$(${SUF}sum "$TARBALL" | cut -d" " -f1)"
                   if [ "$EXPECTED" = "$ACTUAL" ]; then
                     echo "OK: verified apache-tomcat-${TOMCAT_VERSION}.tar.gz via ${SUF} checksum"
                     verify_ok=1
