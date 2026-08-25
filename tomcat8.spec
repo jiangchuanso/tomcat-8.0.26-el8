@@ -1,6 +1,6 @@
 Name:           tomcat8
 Version:        8.0.26
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        Apache Tomcat 8 Servlet/JSP Container
 
 License:        Apache-2.0
@@ -8,45 +8,18 @@ URL:            https://tomcat.apache.org/
 Source0:        apache-tomcat-%{version}.tar.gz
 Source1:        setenv.sh
 
-# jsvc（commons-daemon）编译依赖：C 工具链 + JDK（提供 jni.h 与 javac）
-BuildRequires:  gcc
-BuildRequires:  make
-BuildRequires:  java-1.8.0-openjdk-devel
+# 纯 Java 运行时，整包 noarch，无需编译依赖
 Requires:       java-headless >= 1:1.8.0
 
 # 主包为纯 Java 运行时，标记为 noarch
 BuildArch:      noarch
-# 原生子包仅提供 jsvc（特权端口降权），设为弱依赖，可按需安装
-Recommends:     tomcat8-native = %{version}-%{release}
 
 %description
 Apache Tomcat is an open source implementation of the Java Servlet and
 JavaServer Pages technologies.
 
-# 原生子包：仅包含按架构编译的 jsvc（x86_64 / aarch64）
-%package native
-Summary:        Tomcat 8 jsvc (commons-daemon) native binary
-%description native
-Architecture-specific native component for Tomcat 8:
-- jsvc  (commons-daemon，用于以特权端口启动后降权；APR/native TLS 未启用)
-
 %prep
 %setup -q -n apache-tomcat-%{version}
-
-%build
-# 探测 JAVA_HOME（容器内为 java-1.8.0-openjdk-devel，提供 jni.h 与 javac）
-export JAVA_HOME=$(ls -d /usr/lib/jvm/java-1.8.0-openjdk 2>/dev/null | head -1)
-if [ -z "$JAVA_HOME" ]; then
-    JAVA_HOME=$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")
-fi
-export JAVA_HOME
-
-# 编译 commons-daemon (jsvc)
-tar xzf bin/commons-daemon-native.tar.gz
-pushd commons-daemon-*/unix
-./configure --with-java="$JAVA_HOME"
-make
-popd
 
 %install
 rm -rf %{buildroot}
@@ -67,12 +40,8 @@ mkdir -p %{buildroot}/var/cache/tomcat8/{temp,work}
 mv %{buildroot}/opt/tomcat8/conf %{buildroot}/opt/tomcat8/conf.dist
 touch %{buildroot}/var/cache/tomcat8/tomcat8.pid
 
-# 安装自定义 setenv.sh（JVM 启动环境变量兜底）
+# 安装自定义 setenv.sh（JVM 启动环境变量兜底，不依赖原生库）
 install -m 0644 %{SOURCE1} %{buildroot}/opt/tomcat8/bin/setenv.sh
-
-# jsvc 装入 libexec，避免污染 PATH（native 子包）
-mkdir -p %{buildroot}%{_libexecdir}/tomcat8
-install -m 0755 commons-daemon-*/unix/jsvc %{buildroot}%{_libexecdir}/tomcat8/jsvc
 
 # 创建 systemd 服务文件（catalina.sh run + Type=simple，日志直接进入 journald）
 mkdir -p %{buildroot}/usr/lib/systemd/system
@@ -137,10 +106,11 @@ systemctl daemon-reload &>/dev/null || :
 /var/cache/tomcat8/tomcat8.pid
 /usr/lib/systemd/system/tomcat8.service
 
-%files native
-%{_libexecdir}/tomcat8/jsvc
-
 %changelog
+* Tue Aug 25 2026 Your Name <you@example.com> - 8.0.26-4
+- 移除 tomcat8-native 子包与 jsvc 编译，整包变为纯 Java noarch，
+  不再区分处理器架构，工作流只需单次构建（x86_64 / aarch64 产物一致）
+
 * Tue Aug 25 2026 Your Name <you@example.com> - 8.0.26-3
 - systemd 服务改用 `catalina.sh run` + `Type=simple`，日志直接进入 journald；
   移除 startup.sh/shutdown.sh 的 forking 方式，并加 SuccessExitStatus=143
