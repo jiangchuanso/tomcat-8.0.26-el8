@@ -1,4 +1,4 @@
-name: Build Tomcat 8.0.26 EL8 RPM
+name: Build Tomcat EL8 RPM
 
 on:
   push:
@@ -7,16 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Tomcat 版本（需与 tomcat8.spec 中的 Version 一致）'
+        description: 'Tomcat 版本（手动触发时生效；例如 8.0.26 / 8.5.100 / 9.0.80）'
         required: false
         default: '8.0.26'
 
 # 允许工作流创建 Release
 permissions:
   contents: write
-
-env:
-  TOMCAT_VERSION: "8.0.26"
 
 jobs:
   build:
@@ -26,11 +23,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 计算版本号：
+      #   - tag 推送（v8.0.26）→ 取去 v 后的 8.0.26
+      #   - 手动触发 → 用输入的 version
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=${VERSION}"        >> "$GITHUB_OUTPUT"
+          echo "major=${VERSION%%.*}"      >> "$GITHUB_OUTPUT"
+          echo "Building Tomcat ${VERSION} (major ${VERSION%%.*})"
+
       # 整包为纯 Java noarch，x86_64 / aarch64 产物一致，单次构建即可，
       # 无需 QEMU 模拟 arm64，也无需区分处理器架构
       - name: Build noarch RPM in Rocky Linux 8 container
+        env:
+          TOMCAT_VERSION: ${{ steps.ver.outputs.version }}
+          TOMCAT_MAJOR: ${{ steps.ver.outputs.major }}
         run: |
           docker run --rm \
+            -e TOMCAT_VERSION -e TOMCAT_MAJOR \
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             rockylinux:8 \
@@ -38,23 +55,40 @@ jobs:
               set -euxo pipefail
 
               # 纯 Java noarch 包：只需 RPM 构建工具，无需 gcc/make/openssl/apr 等原生编译链
+              # curl/ca-certificates 用于从官方归档下载 Tomcat 分发包
               dnf install -y --setopt=install_weak_deps=False \
                 rpm-build rpmdevtools tar gzip which file \
+                curl ca-certificates \
                 java-1.8.0-openjdk-headless dnf-plugins-core
 
               # 初始化 rpmbuild 目录树
               rpmdev-setuptree
 
-              # 准备源代码
-              cp tomcat8.spec "$HOME/rpmbuild/SPECS/"
-              cp "apache-tomcat-${{ env.TOMCAT_VERSION }}.tar.gz" "$HOME/rpmbuild/SOURCES/"
+              # 准备源代码（setenv.sh 在仓库内，直接拷贝）
+              cp tomcat.spec "$HOME/rpmbuild/SPECS/"
               cp setenv.sh "$HOME/rpmbuild/SOURCES/"
 
-              # 自动安装 spec 中声明的 BuildRequires（本包为空，no-op）
-              dnf builddep -y "$HOME/rpmbuild/SPECS/tomcat8.spec"
+              # 按版本从官方归档下载 apache-tomcat-<version>.tar.gz（不入库，构建时按需获取）
+              TOMCAT_URL="https://archive.apache.org/dist/tomcat/tomcat-${TOMCAT_MAJOR}/v${TOMCAT_VERSION}/bin/apache-tomcat-${TOMCAT_VERSION}.tar.gz"
+              curl -fsSL -o "$HOME/rpmbuild/SOURCES/apache-tomcat-${TOMCAT_VERSION}.tar.gz" "$TOMCAT_URL"
 
-              # 构建（整包 noarch，单次构建）
-              rpmbuild -bb --clean "$HOME/rpmbuild/SPECS/tomcat8.spec"
+              # 校验 SHA512，防止下载损坏或被篡改
+              curl -fsSL -o /tmp/tomcat.tar.gz.sha512 "${TOMCAT_URL}.sha512"
+              EXPECTED=$(awk "{print \$1}" /tmp/tomcat.tar.gz.sha512)
+              ACTUAL=$(sha512sum "$HOME/rpmbuild/SOURCES/apache-tomcat-${TOMCAT_VERSION}.tar.gz" | awk "{print \$1}")
+              if [ "$EXPECTED" != "$ACTUAL" ]; then
+                echo "ERROR: apache-tomcat-${TOMCAT_VERSION}.tar.gz checksum mismatch" >&2
+                exit 1
+              fi
+
+              # 自动安装 spec 中声明的 BuildRequires（本包为空，no-op）
+              dnf builddep -y "$HOME/rpmbuild/SPECS/tomcat.spec"
+
+              # 构建（整包 noarch，单次构建；版本/主版本号由 --define 注入）
+              rpmbuild -bb --clean \
+                --define "tomcat_version ${TOMCAT_VERSION}" \
+                --define "tomcat_major ${TOMCAT_MAJOR}" \
+                "$HOME/rpmbuild/SPECS/tomcat.spec"
 
               # 收集产物
               mkdir -p /workspace/rpms
