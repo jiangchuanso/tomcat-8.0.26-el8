@@ -21,7 +21,7 @@
   - `tomcat8-native`（架构相关，弱依赖自动安装）：仅编译 `jsvc`（commons-daemon），用于以特权端口（80/443）启动后降权为 `tomcat` 用户。
 - **不依赖原生 TLS 库**：本包不编译 `tomcat-native`（libtcnative-1 / APR），因此不受 CentOS 8（OpenSSL 1.1.1）下原生库与 Tomcat 8.0.26 兼容性问题的困扰。
 - **配置文件保护**：原始配置存放于 `conf.dist`，首次安装时复制到 `conf`，升级不会被覆盖。
-- **Systemd 集成**：提供 `tomcat8.service`，以 `tomcat` 系统用户运行，`Restart=on-failure`。
+- **Systemd 集成**：提供 `tomcat8.service`，以 `tomcat` 系统用户运行，采用 `catalina.sh run` + `Type=simple`，日志直接进入 journald，`Restart=on-failure`。
 - **启动环境兜底**：`setenv.sh` 提供 JVM 启动环境变量钩子，兼容 `x86_64` 与 `aarch64`。
 
 ## 仓库内容
@@ -79,8 +79,8 @@ rpmbuild -bb tomcat8.spec
 生成的 RPM 位于：
 
 ```
-~/rpmbuild/RPMS/noarch/tomcat8-8.0.26-2.el8.noarch.rpm
-~/rpmbuild/RPMS/x86_64/tomcat8-native-8.0.26-2.el8.x86_64.rpm   # 仅含 jsvc，可按需安装
+~/rpmbuild/RPMS/noarch/tomcat8-8.0.26-3.el8.noarch.rpm
+~/rpmbuild/RPMS/x86_64/tomcat8-native-8.0.26-3.el8.x86_64.rpm   # 仅含 jsvc，可按需安装
 ```
 
 > 实际路径与文件名后缀（如 `.el8`）取决于构建系统。

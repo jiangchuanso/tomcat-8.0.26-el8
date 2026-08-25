@@ -1,6 +1,6 @@
 Name:           tomcat8
 Version:        8.0.26
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Apache Tomcat 8 Servlet/JSP Container
 
 License:        Apache-2.0
@@ -74,7 +74,7 @@ install -m 0644 %{SOURCE1} %{buildroot}/opt/tomcat8/bin/setenv.sh
 mkdir -p %{buildroot}%{_libexecdir}/tomcat8
 install -m 0755 commons-daemon-*/unix/jsvc %{buildroot}%{_libexecdir}/tomcat8/jsvc
 
-# 创建 systemd 服务文件
+# 创建 systemd 服务文件（catalina.sh run + Type=simple，日志直接进入 journald）
 mkdir -p %{buildroot}/usr/lib/systemd/system
 cat > %{buildroot}/usr/lib/systemd/system/tomcat8.service <<EOF
 [Unit]
@@ -82,7 +82,7 @@ Description=Apache Tomcat 8
 After=syslog.target network.target
 
 [Service]
-Type=forking
+Type=simple
 User=tomcat
 Group=tomcat
 
@@ -90,8 +90,8 @@ Environment=CATALINA_HOME=/opt/tomcat8
 Environment=CATALINA_BASE=/opt/tomcat8
 Environment=CATALINA_PID=/var/cache/tomcat8/tomcat8.pid
 
-ExecStart=/opt/tomcat8/bin/startup.sh
-ExecStop=/opt/tomcat8/bin/shutdown.sh
+ExecStart=/opt/tomcat8/bin/catalina.sh run
+SuccessExitStatus=143
 
 LimitNOFILE=65536
 LimitNPROC=4096
@@ -141,6 +141,11 @@ systemctl daemon-reload &>/dev/null || :
 %{_libexecdir}/tomcat8/jsvc
 
 %changelog
+* Tue Aug 25 2026 Your Name <you@example.com> - 8.0.26-3
+- systemd 服务改用 `catalina.sh run` + `Type=simple`，日志直接进入 journald；
+  移除 startup.sh/shutdown.sh 的 forking 方式，并加 SuccessExitStatus=143
+  以将 SIGTERM 正常退出码视为成功停止
+
 * Mon Aug 24 2026 Your Name <you@example.com> - 8.0.26-2
 - 改用默认 NIO + JSSE 连接器，移除 tomcat-native（libtcnative-1）编译与
   useAprConnector 强制，避免 CentOS 8 (OpenSSL 1.1.1) 下的原生库兼容问题；
