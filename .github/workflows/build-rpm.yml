@@ -60,7 +60,7 @@ jobs:
               # rpmdevtools 位于 PowerTools 仓库（Rocky 8 默认禁用），需临时启用
               dnf install -y --setopt=install_weak_deps=False --enablerepo=powertools \
                 rpm-build rpmdevtools tar gzip which file \
-                curl ca-certificates gnupg2 \
+                curl ca-certificates \
                 java-1.8.0-openjdk-headless dnf-plugins-core
 
               # 初始化 rpmbuild 目录树
@@ -74,16 +74,27 @@ jobs:
               TOMCAT_URL="https://archive.apache.org/dist/tomcat/tomcat-${TOMCAT_MAJOR}/v${TOMCAT_VERSION}/bin/apache-tomcat-${TOMCAT_VERSION}.tar.gz"
               curl -fsSL -o "$HOME/rpmbuild/SOURCES/apache-tomcat-${TOMCAT_VERSION}.tar.gz" "$TOMCAT_URL"
 
-              # 完整性校验：并非每个版本都发布 sha1/sha512 摘要，但每个版本都提供 GPG 签名
-              #（.asc，detached signature），故改用 GPG 验签。先导入 Apache 发布公钥环（KEYS）。
-              curl -fsSL -o "$HOME/rpmbuild/SOURCES/apache-tomcat-${TOMCAT_VERSION}.tar.gz.asc" "${TOMCAT_URL}.asc"
-              curl -fsSL -o /tmp/tomcat-KEYS https://downloads.apache.org/tomcat/KEYS
-              gpg --batch --import /tmp/tomcat-KEYS
-              if ! gpg --batch --verify \
-                    "$HOME/rpmbuild/SOURCES/apache-tomcat-${TOMCAT_VERSION}.tar.gz.asc" \
-                    "$HOME/rpmbuild/SOURCES/apache-tomcat-${TOMCAT_VERSION}.tar.gz" 2>/tmp/gpg-verify.out; then
-                echo "ERROR: GPG signature verification failed for apache-tomcat-${TOMCAT_VERSION}.tar.gz" >&2
-                cat /tmp/gpg-verify.out
+              # 完整性校验：Apache 并非每个版本都发布全部摘要，也不保证 KEYS/GPG
+              # 验签链路稳定（downloads.apache.org/tomcat/KEYS 偶发 404），故按优先级
+              # 依次尝试 sha512 -> sha1 -> md5：下载成功哪个就用哪个校验（取最强可用摘要）。
+              TARBALL="$HOME/rpmbuild/SOURCES/apache-tomcat-${TOMCAT_VERSION}.tar.gz"
+              verify_ok=0
+              for SUF in sha512 sha1 md5; do
+                if curl -fsSL -o "/tmp/apache-tomcat-${TOMCAT_VERSION}.tar.gz.${SUF}" "${TOMCAT_URL}.${SUF}"; then
+                  EXPECTED="$(awk '{print $1}' "/tmp/apache-tomcat-${TOMCAT_VERSION}.tar.gz.${SUF}")"
+                  ACTUAL="$(${SUF}sum "$TARBALL" | awk '{print $1}')"
+                  if [ "$EXPECTED" = "$ACTUAL" ]; then
+                    echo "OK: verified apache-tomcat-${TOMCAT_VERSION}.tar.gz via ${SUF} checksum"
+                    verify_ok=1
+                    break
+                  else
+                    echo "ERROR: ${SUF} checksum mismatch for apache-tomcat-${TOMCAT_VERSION}.tar.gz" >&2
+                    exit 1
+                  fi
+                fi
+              done
+              if [ "$verify_ok" -ne 1 ]; then
+                echo "ERROR: could not download any checksum (sha512/sha1/md5) for apache-tomcat-${TOMCAT_VERSION}.tar.gz" >&2
                 exit 1
               fi
 
