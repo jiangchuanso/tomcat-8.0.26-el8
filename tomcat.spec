@@ -1,6 +1,6 @@
 # 版本无关模板：tomcat_version / tomcat_major 由构建时 --define 注入，
 # 默认构建 Tomcat 8.0.26。工作流按 git tag 的 v 版本号传入对应值即可自由构建。
-# 版本由构建时 --define 注入；命令行已传入时，此处默认值不生效（%define 会覆盖命令行，故用 %{!?...} 守卫）
+# 版本由构建时 --define 注入；命令行已传入时此处默认值不生效（spec 内 define 会覆盖命令行，故用守卫）
 %{!?tomcat_version: %define tomcat_version 8.0.26}
 %{!?tomcat_major: %define tomcat_major 8}
 
