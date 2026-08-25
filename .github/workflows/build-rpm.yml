@@ -32,6 +32,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.version }}"
+            VERSION="${VERSION:-8.0.26}"
           else
             VERSION="${GITHUB_REF_NAME#v}"
           fi
@@ -56,9 +57,10 @@ jobs:
 
               # 纯 Java noarch 包：只需 RPM 构建工具，无需 gcc/make/openssl/apr 等原生编译链
               # curl/ca-certificates 用于从官方归档下载 Tomcat 分发包
-              dnf install -y --setopt=install_weak_deps=False \
+              # rpmdevtools 位于 PowerTools 仓库（Rocky 8 默认禁用），需临时启用
+              dnf install -y --setopt=install_weak_deps=False --enablerepo=powertools \
                 rpm-build rpmdevtools tar gzip which file \
-                curl ca-certificates \
+                curl ca-certificates gnupg2 \
                 java-1.8.0-openjdk-headless dnf-plugins-core
 
               # 初始化 rpmbuild 目录树
@@ -72,12 +74,16 @@ jobs:
               TOMCAT_URL="https://archive.apache.org/dist/tomcat/tomcat-${TOMCAT_MAJOR}/v${TOMCAT_VERSION}/bin/apache-tomcat-${TOMCAT_VERSION}.tar.gz"
               curl -fsSL -o "$HOME/rpmbuild/SOURCES/apache-tomcat-${TOMCAT_VERSION}.tar.gz" "$TOMCAT_URL"
 
-              # 校验 SHA512，防止下载损坏或被篡改
-              curl -fsSL -o /tmp/tomcat.tar.gz.sha512 "${TOMCAT_URL}.sha512"
-              EXPECTED=$(awk "{print \$1}" /tmp/tomcat.tar.gz.sha512)
-              ACTUAL=$(sha512sum "$HOME/rpmbuild/SOURCES/apache-tomcat-${TOMCAT_VERSION}.tar.gz" | awk "{print \$1}")
-              if [ "$EXPECTED" != "$ACTUAL" ]; then
-                echo "ERROR: apache-tomcat-${TOMCAT_VERSION}.tar.gz checksum mismatch" >&2
+              # 完整性校验：并非每个版本都发布 sha1/sha512 摘要，但每个版本都提供 GPG 签名
+              #（.asc，detached signature），故改用 GPG 验签。先导入 Apache 发布公钥环（KEYS）。
+              curl -fsSL -o "$HOME/rpmbuild/SOURCES/apache-tomcat-${TOMCAT_VERSION}.tar.gz.asc" "${TOMCAT_URL}.asc"
+              curl -fsSL -o /tmp/tomcat-KEYS https://downloads.apache.org/tomcat/KEYS
+              gpg --batch --import /tmp/tomcat-KEYS
+              if ! gpg --batch --verify \
+                    "$HOME/rpmbuild/SOURCES/apache-tomcat-${TOMCAT_VERSION}.tar.gz.asc" \
+                    "$HOME/rpmbuild/SOURCES/apache-tomcat-${TOMCAT_VERSION}.tar.gz" 2>/tmp/gpg-verify.out; then
+                echo "ERROR: GPG signature verification failed for apache-tomcat-${TOMCAT_VERSION}.tar.gz" >&2
+                cat /tmp/gpg-verify.out
                 exit 1
               fi
 

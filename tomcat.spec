@@ -5,7 +5,7 @@
 
 Name:           tomcat%{tomcat_major}
 Version:        %{tomcat_version}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Apache Tomcat %{tomcat_major} Servlet/JSP Container
 
 License:        Apache-2.0
@@ -49,6 +49,15 @@ mkdir -p %{buildroot}%{tomcat_log}
 mkdir -p %{buildroot}%{tomcat_cache}/{temp,work}
 mv %{buildroot}%{tomcat_home}/conf %{buildroot}%{tomcat_home}/conf.dist
 touch %{buildroot}%{tomcat_cache}/tomcat%{tomcat_major}.pid
+
+# Tomcat 默认写 $CATALINA_BASE/{logs,temp,work}（即 /opt/tomcatN）。
+# tarball 中的这三个目录是空的，RPM 打包不保留空目录，而 tomcat 用户
+# 无权在 /opt 下创建，会导致启动时日志 / JSP work / 临时目录写入失败。
+# 故用符号链接指向 /var 下的运行时目录（FHS，与 RHEL tomcat 惯例一致）。
+rm -rf %{buildroot}%{tomcat_home}/logs %{buildroot}%{tomcat_home}/temp %{buildroot}%{tomcat_home}/work
+ln -s %{tomcat_log}        %{buildroot}%{tomcat_home}/logs
+ln -s %{tomcat_cache}/temp %{buildroot}%{tomcat_home}/temp
+ln -s %{tomcat_cache}/work %{buildroot}%{tomcat_home}/work
 
 # 安装自定义 setenv.sh（JVM 启动环境变量兜底，不依赖原生库）
 install -m 0644 %{SOURCE1} %{buildroot}%{tomcat_home}/bin/setenv.sh
@@ -97,7 +106,7 @@ chown -R tomcat:tomcat %{tomcat_home}
 chown -R tomcat:tomcat %{tomcat_log}
 chown -R tomcat:tomcat %{tomcat_cache}
 chown tomcat:tomcat %{tomcat_cache}/tomcat%{tomcat_major}.pid
-chown 664 %{tomcat_cache}/tomcat%{tomcat_major}.pid
+chmod 664 %{tomcat_cache}/tomcat%{tomcat_major}.pid
 
 # 初始化配置文件（首次安装）
 if [ ! -d %{tomcat_home}/conf ]; then
@@ -117,6 +126,10 @@ systemctl daemon-reload &>/dev/null || :
 /usr/lib/systemd/system/tomcat%{tomcat_major}.service
 
 %changelog
+* Tue Aug 25 2026 Your Name <you@example.com> - 2026.08.25-2
+- 修复 %post 中 `chown 664` 笔误为 `chmod 664`（原会报 invalid user 导致脚本失败）
+- 修复运行时目录缺失：/opt/tomcatN/{logs,temp,work} 改为指向 /var/log 与
+  /var/cache 的符号链接，避免 tomcat 用户无权限创建导致日志 / JSP 编译失败
 * Tue Aug 25 2026 Your Name <you@example.com> - 2026.08.25
 - 重构为版本无关模板：Version/Major 由 rpmbuild --define 注入，
   支持按 git tag 版本下载对应 apache-tomcat-*.tar.gz 自由构建 noarch RPM

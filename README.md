@@ -76,7 +76,7 @@ git push origin v8.0.26
 工作流会：
 
 1. 从 tag 取出版本号（`v8.0.26` → `8.0.26`，主版本号 `8`）；
-2. 下载 `https://archive.apache.org/dist/tomcat/tomcat-8/v8.0.26/bin/apache-tomcat-8.0.26.tar.gz` 并校验 SHA512；
+2. 下载 `https://archive.apache.org/dist/tomcat/tomcat-8/v8.0.26/bin/apache-tomcat-8.0.26.tar.gz` 并用 GPG 签名（`.asc`）校验完整性（注：并非每个版本都发布 sha1/sha512 摘要，但每个版本都提供 `.asc`）；
 3. 以 `rpmbuild --define "tomcat_version 8.0.26" --define "tomcat_major 8"` 构建；
 4. 在 tag 推送时自动创建 GitHub Release 并上传 RPM。
 
@@ -131,6 +131,7 @@ curl http://localhost:8080
 | `/opt/tomcat8` | Tomcat 主目录 |
 | `/opt/tomcat8/conf.dist` | 出厂配置备份（升级不覆盖） |
 | `/opt/tomcat8/conf` | 运行时配置（首次安装由 `conf.dist` 生成） |
+| `/opt/tomcat8/logs`、`temp`、`work` | 符号链接，分别指向 `/var/log/tomcat8`、`/var/cache/tomcat8/temp`、`/var/cache/tomcat8/work` |
 | `/var/log/tomcat8` | 日志目录 |
 | `/var/cache/tomcat8` | 临时 / 工作目录（`temp`、`work`、`tomcat8.pid`） |
 | `/usr/lib/systemd/system/tomcat8.service` | Systemd 服务单元 |

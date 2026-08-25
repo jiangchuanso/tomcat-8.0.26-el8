@@ -1,8 +1,8 @@
 #!/bin/sh
 # Tomcat 启动环境补充（由 RPM 安装到 /opt/tomcat8/bin/setenv.sh）
-# 作用：确保 JVM 能找到 libtcnative-1.so（APR 原生库）。
-# 说明：64 位 JDK 默认 java.library.path 已含 /usr/lib64，本文件仅作跨架构兜底，
-#       且不覆盖用户已自行指定的 java.library.path。
+# 作用：兜底补充 JVM 的 java.library.path。本包为纯 Java noarch（默认 NIO + JSSE），
+#       运行不依赖 tomcat-native / APR 原生库；若未来启用原生库，本文件仍能
+#       保证标准库搜索路径可用，且不覆盖用户已自行指定的 java.library.path。
 
 ARCH=$(uname -m)
 case "$ARCH" in
