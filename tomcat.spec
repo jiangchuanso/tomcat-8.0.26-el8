@@ -6,7 +6,7 @@
 
 Name:           tomcat%{tomcat_major}
 Version:        %{tomcat_version}
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Apache Tomcat %{tomcat_major} Servlet/JSP Container
 
 License:        Apache-2.0
@@ -123,10 +123,11 @@ systemctl daemon-reload &>/dev/null || :
 %{tomcat_home}
 %{tomcat_log}
 %{tomcat_cache}
-%{tomcat_cache}/tomcat%{tomcat_major}.pid
 /usr/lib/systemd/system/tomcat%{tomcat_major}.service
 
 %changelog
+* Tue Sep 01 2026 Your Name <you@example.com> - 8.0.26-3
+- 修复 %files 中 pid 文件重复声明导致 rpmbuild 报 "File listed twice" 构建失败
 * Tue Aug 25 2026 Your Name <you@example.com> - 2026.08.25-2
 - 修复 %post 中 `chown 664` 笔误为 `chmod 664`（原会报 invalid user 导致脚本失败）
 - 修复运行时目录缺失：/opt/tomcatN/{logs,temp,work} 改为指向 /var/log 与
